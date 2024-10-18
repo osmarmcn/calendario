@@ -5,14 +5,13 @@ import 'react-calendar/dist/Calendar.css';
 const MyCalendar = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [availableTimes, setAvailableTimes] = useState([]);
-  const [reservedTimes, setReservedTimes] = useState([]);
+  const [reservedTimes, setReservedTimes] = useState({}); // Alterado para um objeto
   const [selectedTime, setSelectedTime] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
 
-  // Função para desabilitar datas passadas no calendário
   const isDateInPast = (date) => {
     const today = new Date();
-    return date < today.setHours(0, 0, 0, 0); // Compara apenas as datas, ignorando as horas
+    return date < today.setHours(0, 0, 0, 0);
   };
 
   const handleDateChange = (date) => {
@@ -20,54 +19,59 @@ const MyCalendar = () => {
     generateAvailableTimes(date);
   };
 
-  // Gerar horários disponíveis, exceto os já reservados
   const generateAvailableTimes = (date) => {
     const times = [];
     const startHour = 9; // Horário de início
     const endHour = 17; // Horário de fim
+    const dateKey = date.toISOString().split('T')[0]; // Formato YYYY-MM-DD
 
     for (let hour = startHour; hour < endHour; hour++) {
       const time = `${hour}:00`;
-      if (!reservedTimes.includes(time)) times.push(time); // Horários já reservados não aparecem na lista de disponíveis
+      // Verifica se o horário está reservado para a data selecionada
+      if (!reservedTimes[dateKey] || !reservedTimes[dateKey].includes(time)) {
+        times.push(time);
+      }
     }
     setAvailableTimes(times);
   };
 
-  // Função para agendar uma reunião
   const bookMeeting = (time) => {
     const today = new Date();
+    const dateKey = selectedDate.toISOString().split('T')[0];
 
-    // Verifica se a data selecionada é no passado
     if (selectedDate.setHours(0, 0, 0, 0) < today.setHours(0, 0, 0, 0)) {
       alert('Não é possível agendar em uma data passada.');
       return;
     }
 
-    setReservedTimes([...reservedTimes, time]);
+    // Adiciona o horário ao objeto de horários reservados
+    setReservedTimes((prev) => {
+      const newReserved = { ...prev };
+      if (!newReserved[dateKey]) newReserved[dateKey] = [];
+      newReserved[dateKey].push(time);
+      return newReserved;
+    });
+
     setSelectedTime(time);
-    setAvailableTimes(availableTimes.filter(t => t !== time)); // Remove o horário da lista de disponíveis
+    setAvailableTimes(availableTimes.filter(t => t !== time));
     alert(`Reunião agendada para ${selectedDate.toDateString()} às ${time}`);
   };
 
-  // Função para ordenar horários no formato "HH:MM"
-  const sortTimes = (times) => {
-    return times.sort((a, b) => {
-      const [aHour] = a.split(':').map(Number);
-      const [bHour] = b.split(':').map(Number);
-      return aHour - bHour;
-    });
-  };
-
-  // Função para cancelar uma reunião
   const cancelMeeting = (time) => {
-    // Remover o horário da lista de horários reservados
-    const updatedReservedTimes = reservedTimes.filter(t => t !== time);
-    setReservedTimes(updatedReservedTimes);
+    const dateKey = selectedDate.toISOString().split('T')[0];
 
-    // Adicionar o horário de volta à lista de horários disponíveis e ordenar
+    setReservedTimes((prev) => {
+      const newReserved = { ...prev };
+      newReserved[dateKey] = newReserved[dateKey].filter(t => t !== time);
+      // Remove a chave se não houver mais horários reservados
+      if (newReserved[dateKey].length === 0) {
+        delete newReserved[dateKey];
+      }
+      return newReserved;
+    });
+
     const updatedAvailableTimes = [...availableTimes, time];
-    setAvailableTimes(sortTimes(updatedAvailableTimes)); // Ordena os horários ao adicionar de volta
-
+    setAvailableTimes(updatedAvailableTimes.sort());
     alert(`Reunião cancelada para ${selectedDate.toDateString()} às ${time}`);
   };
 
@@ -87,7 +91,7 @@ const MyCalendar = () => {
           <Calendar
             onChange={handleDateChange}
             value={selectedDate}
-            tileDisabled={({ date, view }) => view === 'month' && isDateInPast(date)} // Desabilitar datas passadas
+            tileDisabled={({ date, view }) => view === 'month' && isDateInPast(date)}
             className="border-r border-gray-200"
           />
         </div>
@@ -112,19 +116,21 @@ const MyCalendar = () => {
           )}
 
           <h2 className={`text-xl font-bold mt-6 mb-4 ${darkMode ? 'text-black' : 'text-black'}`}>Horários Reservados</h2>
-          {reservedTimes.length > 0 ? (
-            reservedTimes.map(time => (
-              <div key={time} className="mb-2 flex items-center justify-between p-3 border rounded-lg bg-red-100 border-red-300">
-                <span className={`text-lg font-semibold ${darkMode ? 'text-black' : 'text-black'}`}>{time}</span>
-                <div>
-                  <button
-                    onClick={() => cancelMeeting(time)}
-                    className={`ml-2 px-4 py-1 rounded ${darkMode ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-red-600 text-white hover:bg-red-700'}`}
-                  >
-                    Cancelar
-                  </button>
+          {Object.keys(reservedTimes).length > 0 ? (
+            Object.entries(reservedTimes).map(([date, times]) => (
+              times.map(time => (
+                <div key={`${date}-${time}`} className="mb-2 flex items-center justify-between p-3 border rounded-lg bg-red-100 border-red-300">
+                  <span className={`text-lg font-semibold ${darkMode ? 'text-black' : 'text-black'}`}>{time} em {new Date(date).toDateString()}</span>
+                  <div>
+                    <button
+                      onClick={() => cancelMeeting(time)}
+                      className={`ml-2 px-4 py-1 rounded ${darkMode ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ))
             ))
           ) : (
             <p className={`text-gray-500 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Nenhum horário reservado</p>
